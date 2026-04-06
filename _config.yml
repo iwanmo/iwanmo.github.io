@@ -16,7 +16,7 @@ timezone: Asia/Seoul
 
 title: "iwanmo's Blog" # the main title
 
-tagline: A developer's journey # it will display as the subtitle
+tagline: Developer & AI Researcher # it will display as the subtitle
 
 description: >- # used by seo meta and the atom feed
   iwanmo's developer blog
