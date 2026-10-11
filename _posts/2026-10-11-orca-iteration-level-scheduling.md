@@ -1,5 +1,5 @@
 ---
-title: "Orca 논문 정리: Iteration-level Scheduling과 Selective Batching"
+title: "[논문 정리] Orca (OSDI '22): Iteration-level Scheduling과 Selective Batching"
 date: 2026-10-11 16:30:00 +0900
 categories: [Paper Review, LLM Serving]
 tags: [orca, llm, inference, serving, batching, kv-cache]
