@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Request-level 배칭의 KV 캐시</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+
+:root {
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --line: #e1e4e9;
+  --ink: #16181d;
+  --sub: #4b5260;
+  --muted: #6b7280;
+  --event: #e6e9ee;
+  --k-bg: #e6e9ee; --k-fg: #3a404b; --k-bd: #c9ced6;
+  --n-bg: #dce7fd; --n-fg: #1a4fbf; --n-bd: #a9c2f5;
+  --d-bg: #fcddc8; --d-fg: #a8410a; --d-bd: #f1a979;
+  --e-bd: #8a919c;
+  --f-bg: #eef0f3;
+  --btn-bd: #c9ced6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b;
+    --card: #1d2026;
+    --line: #2d313a;
+    --ink: #eef0f3;
+    --sub: #a9afba;
+    --muted: #8a919c;
+    --event: #262a32;
+    --k-bg: #2a2e37; --k-fg: #c9ced6; --k-bd: #3a3f4a;
+    --n-bg: #1d3566; --n-fg: #b9cffb; --n-bd: #2f5299;
+    --d-bg: #4d2810; --d-fg: #f7bf98; --d-bd: #7a3f17;
+    --e-bd: #5d6470;
+    --f-bg: #22252c;
+    --btn-bd: #3a3f4a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+.kv {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kv-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.kv-head h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.01em; }
+.kv-sub { margin: 6px 0 0; font-size: 15px; color: var(--sub); line-height: 1.5; }
+
+.kv-badge {
+  flex: none;
+  min-width: 112px;
+  padding: 10px 14px;
+  border: 1px solid var(--btn-bd);
+  border-radius: 10px;
+  background: var(--card);
+  text-align: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.kv-controls { display: flex; align-items: center; gap: 8px; }
+.kv-controls button {
+  height: 44px; min-width: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid var(--btn-bd);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit; font-size: 15px; font-weight: 500;
+  cursor: pointer;
+}
+.kv-controls button.kv-play { padding: 0 16px; background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.kv-controls svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.kv-range { flex: 1; display: flex; }
+.kv-range input { width: 100%; accent-color: var(--n-fg); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--n-fg); outline-offset: 2px; }
+
+.kv-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+.kv-card h2 { margin: 0 0 10px; font-size: 13px; font-weight: 500; color: var(--sub); }
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 84px;
+  gap: 12px;
+  align-items: center;
+}
+.kv-grid-head { font-size: 12px; color: var(--sub); margin-bottom: 10px; }
+.kv-row + .kv-row { margin-top: 12px; }
+
+.kv-name { font-size: 16px; font-weight: 600; }
+.kv-status { font-size: 12px; color: var(--sub); margin-top: 2px; }
+.kv-status.is-warn { color: var(--d-fg); }
+
+.kv-slots { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.slot {
+  height: 44px;
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  border: 1px solid transparent;
+  overflow: hidden; white-space: nowrap;
+  transition: background-color .3s, color .3s, border-color .3s;
+}
+.slot.c-k { background: var(--k-bg); color: var(--k-fg); border-color: var(--k-bd); }
+.slot.c-n { background: var(--n-bg); color: var(--n-fg); border-color: var(--n-bd); font-weight: 600; }
+.slot.c-d { background: var(--d-bg); color: var(--d-fg); border-color: var(--d-bd); }
+.slot.c-e { border: 1px dashed var(--e-bd); }
+.slot.c-f { background: var(--f-bg); }
+
+.kv-out {
+  height: 40px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 500;
+  background: var(--event);
+}
+.kv-out.is-warn { color: var(--d-fg); }
+.kv-out.is-done { background: var(--ink); color: var(--bg); }
+
+.kv-event {
+  margin: 0;
+  background: var(--event);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 15px; font-weight: 500; line-height: 1.5;
+}
+
+.kv-pair { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
+.kv-shape { margin: 0; font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 16px; overflow-x: auto; white-space: nowrap; }
+.kv-queue { margin: 0; font-size: 16px; font-weight: 500; }
+.kv-note { margin: 6px 0 0; font-size: 13px; color: var(--sub); line-height: 1.5; }
+
+.kv-foot { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.kv-stats { display: flex; gap: 12px; margin: 0; }
+.kv-stats div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; min-width: 190px; }
+.kv-stats dt { font-size: 12px; color: var(--sub); }
+.kv-stats dd { margin: 4px 0 0; font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 22px; }
+.kv-stats dd.is-warn { color: var(--d-fg); }
+
+.kv-legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, auto); gap: 8px 20px; font-size: 13px; color: var(--sub); }
+.kv-legend li { display: flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid transparent; }
+.sw.c-k { background: var(--k-bg); border-color: var(--k-bd); }
+.sw.c-n { background: var(--n-bg); border-color: var(--n-bd); }
+.sw.c-d { background: var(--d-bg); border-color: var(--d-bd); }
+.sw.c-e { border: 1px dashed var(--e-bd); }
+
+@media (max-width: 720px) {
+  .kv { padding: 20px 14px; }
+  .kv-head { flex-direction: column; align-items: flex-start; }
+  .kv-grid { grid-template-columns: 1fr; gap: 6px; }
+  .kv-grid-head { display: none; }
+  .kv-row-meta { display: flex; justify-content: space-between; align-items: baseline; }
+  .slot { height: 36px; font-size: 10px; }
+  .kv-out { height: 32px; }
+  .kv-pair { grid-template-columns: 1fr; }
+  .kv-stats { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot { transition: none; }
+}
+</style>
+</head>
+<body>
+<main class="kv" aria-labelledby="kv-title">
+  <header class="kv-head">
+    <div>
+      <h1 id="kv-title">Request-level 배칭의 KV 캐시</h1>
+      <p class="kv-sub">요청마다 최대 길이 10슬롯을 미리 잡아두고, 배치 안의 요청은 같이 시작해 같이 끝납니다.</p>
+    </div>
+    <output class="kv-badge" id="kv-badge" aria-live="polite">iter 1</output>
+  </header>
+
+  <div class="kv-controls">
+    <button type="button" id="kv-prev" aria-label="이전 iteration">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <button type="button" id="kv-play" class="kv-play">
+      <svg viewBox="0 0 24 24" aria-hidden="true" id="kv-play-icon"><path d="M7 5l12 7-12 7z"/></svg>
+      <span id="kv-play-label">재생</span>
+    </button>
+    <button type="button" id="kv-next" aria-label="다음 iteration">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+    <label class="kv-range">
+      <span class="sr-only">iteration 선택</span>
+      <input type="range" id="kv-step" min="1" max="6" step="1" value="1">
+    </label>
+  </div>
+
+  <section class="kv-card" aria-label="요청별 KV 메모리">
+    <div class="kv-grid kv-grid-head">
+      <span>요청</span>
+      <span>KV 메모리 (요청당 10슬롯 고정 예약)</span>
+      <span class="kv-out-head">이번 출력</span>
+    </div>
+    <div id="kv-rows"></div>
+  </section>
+
+  <p class="kv-event" id="kv-event" aria-live="polite"></p>
+
+  <div class="kv-pair">
+    <section class="kv-card">
+      <h2>이번 iteration의 attention 텐서</h2>
+      <p class="kv-shape" id="kv-shape"></p>
+      <p class="kv-note" id="kv-shape-note"></p>
+    </section>
+    <section class="kv-card">
+      <h2>요청 D</h2>
+      <p class="kv-queue" id="kv-queue"></p>
+      <p class="kv-note" id="kv-queue-note"></p>
+    </section>
+  </div>
+
+  <div class="kv-foot">
+    <dl class="kv-stats">
+      <div><dt>의미 없는 K/V 계산 (누적)</dt><dd id="kv-dummy" class="is-warn">0</dd></div>
+      <div><dt>예약했지만 빈 슬롯</dt><dd id="kv-empty">0 / 30</dd></div>
+    </dl>
+    <ul class="kv-legend">
+      <li><i class="sw c-k"></i>캐시에서 읽음</li>
+      <li><i class="sw c-n"></i>이번에 새로 계산</li>
+      <li><i class="sw c-d"></i>끝난 요청의 의미 없는 K/V</li>
+      <li><i class="sw c-e"></i>미리 잡아둔 빈 슬롯</li>
+    </ul>
+  </div>
+</main>
+<script>
+// Request-level 배칭에서 KV 캐시가 iteration마다 어떻게 쌓이는지 보여주는 데모
+const MAX_SLOTS = 10;
+const LAST_ITER = 5;   // 가장 긴 요청 A가 끝나는 iteration
+const STEPS = 6;       // iter 1~5 + 배치 종료
+const PLAY_MS = 1600;
+
+const REQUESTS = [
+  { id: "A", prompt: ["나는", "오늘", "아침에"], gen: ["밥을", "먹고", "학교에", "갔다", "EOS"] },
+  { id: "B", prompt: ["날씨가", "오늘", "정말"], gen: ["좋다", "EOS"] },
+  { id: "C", prompt: ["오늘", "저녁", "메뉴는"], gen: ["치킨", "어때", "EOS"] },
+];
+
+const EVENTS = {
+  1: "프롬프트 처리: 세 요청 모두 프롬프트 3토큰의 K/V를 한꺼번에 계산해 캐시에 저장합니다.",
+  2: "B가 EOS를 냈지만 배치에서 빠질 수 없습니다. D가 도착했지만 KV 메모리를 받지 못하고 기다립니다.",
+  3: "B는 의미 없는 입력으로 K/V를 계속 계산합니다. C도 EOS를 냈습니다.",
+  4: "B와 C 모두 의미 없는 K/V를 쌓고 있습니다. 실제로 생성 중인 건 A 하나입니다.",
+  5: "가장 긴 요청 A가 EOS를 내서야 배치 전체가 끝날 수 있습니다.",
+  6: "배치 종료: A, B, C를 한꺼번에 반환하고 30슬롯을 해제합니다. 이제야 D가 새 배치로 시작합니다.",
+};
+
+// slot j에 들어가는 K/V가 몇 번째 iteration에 계산되는지, 끝난 뒤의 의미 없는 값인지
+function cellsAt(req, iter) {
+  const finish = req.gen.length;
+  const cells = [];
+  for (let j = 0; j < MAX_SLOTS; j++) {
+    let computedAt, label, dummy = false;
+    if (j < req.prompt.length) {
+      computedAt = 1;
+      label = req.prompt[j];
+    } else {
+      computedAt = j - 1;
+      dummy = computedAt > finish;
+      label = dummy ? "-" : req.gen[j - req.prompt.length];
+    }
+    if (computedAt > iter || computedAt > LAST_ITER) {
+      cells.push({ cls: "c-e", label: "" });
+    } else {
+      cells.push({ cls: dummy ? "c-d" : computedAt === iter ? "c-n" : "c-k", label });
+    }
+  }
+  return cells;
+}
+
+function statusAt(req, iter) {
+  const finish = req.gen.length;
+  if (iter > LAST_ITER) return { text: "반환 · 메모리 해제", warn: false };
+  if (iter < finish) return { text: "생성 중", warn: false };
+  if (iter === finish) return { text: "방금 끝남 (EOS)", warn: false };
+  return { text: "끝남 · 배치에 묶임", warn: true };
+}
+
+const $ = (id) => document.getElementById(id);
+const rowsEl = $("kv-rows");
+const stepEl = $("kv-step");
+let iter = 1;
+let timer = null;
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function render() {
+  stepEl.value = iter;
+  $("kv-badge").textContent = iter <= LAST_ITER ? `iter ${iter}` : "배치 종료";
+
+  rowsEl.replaceChildren();
+  let dummyCount = 0;
+  let usedCount = 0;
+
+  REQUESTS.forEach((req) => {
+    const counted = cellsAt(req, Math.min(iter, LAST_ITER));
+    counted.forEach((c) => {
+      if (c.cls === "c-d") dummyCount++;
+      if (c.cls !== "c-e") usedCount++;
+    });
+
+    const row = el("div", "kv-grid kv-row");
+    const meta = el("div", "kv-row-meta");
+    const st = statusAt(req, iter);
+    meta.append(el("div", "kv-name", `요청 ${req.id}`), el("div", "kv-status" + (st.warn ? " is-warn" : ""), st.text));
+
+    const slots = el("div", "kv-slots");
+    const cells = iter <= LAST_ITER ? cellsAt(req, iter) : Array(MAX_SLOTS).fill({ cls: "c-f", label: "" });
+    cells.forEach((c) => slots.append(el("div", `slot ${c.cls}`, c.label)));
+
+    let outText, outCls = "kv-out";
+    if (iter > LAST_ITER) { outText = "반환"; outCls += " is-done"; }
+    else if (iter > req.gen.length) { outText = "-"; outCls += " is-warn"; }
+    else { outText = req.gen[iter - 1]; }
+    const out = el("div", outCls, outText);
+    out.setAttribute("aria-label", `요청 ${req.id} 이번 출력: ${outText}`);
+
+    row.append(meta, slots, out);
+    rowsEl.append(row);
+  });
+
+  $("kv-event").textContent = EVENTS[iter];
+
+  if (iter === 1) {
+    $("kv-shape").textContent = "Q [3, 3, d] × Kᵀ [3, d, 3] → [3, 3, 3]";
+    $("kv-shape-note").textContent = "프롬프트 길이가 같아서 그대로 3차원으로 쌓입니다.";
+  } else if (iter <= LAST_ITER) {
+    const len = 3 + iter - 1;
+    $("kv-shape").textContent = `Q [3, 1, d] × Kᵀ [3, d, ${len}] → [3, 1, ${len}]`;
+    $("kv-shape-note").textContent = "K/V 길이가 항상 같아 batched matmul 한 번으로 끝납니다. 대신 끝난 요청도 한 행을 차지합니다.";
+  } else {
+    $("kv-shape").textContent = "—";
+    $("kv-shape-note").textContent = "배치가 끝나 다음 배치를 기다리는 중입니다.";
+  }
+
+  if (iter === 1) {
+    $("kv-queue").textContent = "아직 도착 전";
+    $("kv-queue-note").textContent = "";
+  } else if (iter <= LAST_ITER) {
+    $("kv-queue").textContent = "iter 2에 도착, 큐에서 대기";
+    $("kv-queue-note").textContent = "배치가 끝날 때까지 KV 메모리를 받지 못합니다.";
+  } else {
+    $("kv-queue").textContent = "새 배치로 시작";
+    $("kv-queue-note").textContent = "10슬롯을 새로 예약합니다.";
+  }
+
+  $("kv-dummy").textContent = dummyCount;
+  $("kv-empty").textContent = `${iter <= LAST_ITER ? 30 - usedCount : 0} / 30`;
+}
+
+function setPlaying(on) {
+  clearInterval(timer);
+  timer = null;
+  $("kv-play-label").textContent = on ? "일시정지" : "재생";
+  $("kv-play-icon").innerHTML = on ? '<path d="M8 5v14M16 5v14"/>' : '<path d="M7 5l12 7-12 7z"/>';
+  if (on) {
+    if (iter >= STEPS) { iter = 1; render(); }
+    timer = setInterval(() => {
+      iter = iter >= STEPS ? 1 : iter + 1;
+      render();
+    }, PLAY_MS);
+  }
+}
+
+$("kv-play").addEventListener("click", () => setPlaying(timer === null));
+$("kv-prev").addEventListener("click", () => { setPlaying(false); iter = Math.max(1, iter - 1); render(); });
+$("kv-next").addEventListener("click", () => { setPlaying(false); iter = Math.min(STEPS, iter + 1); render(); });
+stepEl.addEventListener("input", (e) => { setPlaying(false); iter = Number(e.target.value); render(); });
+
+render();
+</script>
+</body>
+</html>

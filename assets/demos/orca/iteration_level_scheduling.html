@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orca의 iteration-level 스케줄링</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f4f5f7; --card: #ffffff; --line: #e1e4e9; --ink: #16181d; --sub: #4b5260; --muted: #6b7280;
+  --event: #e6e9ee; --btn-bd: #c9ced6;
+  --a-bg: #dce7fd; --a-fg: #1a4fbf; --a-bd: #a9c2f5;
+  --w-bg: #fcddc8; --w-fg: #a8410a; --w-bd: #f1a979;
+  --q-bd: #8a919c; --q-fg: #3a404b;
+  --r-bg: #16181d; --r-fg: #ffffff;
+  --blank: #e6e9ee; --idle-fg: #6b7280; --idle-bd: #e1e4e9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b; --card: #1d2026; --line: #2d313a; --ink: #eef0f3; --sub: #a9afba; --muted: #8a919c;
+    --event: #262a32; --btn-bd: #3a3f4a;
+    --a-bg: #1d3566; --a-fg: #b9cffb; --a-bd: #2f5299;
+    --w-bg: #4d2810; --w-fg: #f7bf98; --w-bd: #7a3f17;
+    --q-bd: #5d6470; --q-fg: #c9ced6;
+    --r-bg: #eef0f3; --r-fg: #15171b;
+    --blank: #262a32; --idle-fg: #8a919c; --idle-bd: #2d313a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 28px 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+
+.head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.head h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.01em; }
+.sub { margin: 6px 0 0; font-size: 15px; color: var(--sub); line-height: 1.5; }
+.badge { flex: none; min-width: 96px; padding: 10px 14px; border: 1px solid var(--btn-bd); border-radius: 10px; background: var(--card); text-align: center; font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 16px; }
+
+.bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--btn-bd); border-radius: 10px; overflow: hidden; background: var(--card); }
+.seg button { height: 44px; padding: 0 16px; border: 0; background: transparent; color: var(--sub); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.ctl { height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--btn-bd); border-radius: 10px; background: var(--card); color: var(--ink); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; padding: 0 12px; }
+.ctl svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.range { flex: 1; min-width: 160px; display: flex; }
+.range input { width: 100%; accent-color: var(--a-fg); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--a-fg); outline-offset: 2px; }
+
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.card h2 small { font-size: 12px; font-weight: 400; color: var(--sub); font-family: "IBM Plex Mono", monospace; }
+.col { min-height: 270px; display: flex; flex-direction: column; gap: 6px; }
+.chip { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; font-size: 13px; border: 1px solid transparent; transition: background-color .3s, color .3s; }
+.chip b { font-weight: 600; }
+.chip.a { background: var(--a-bg); color: var(--a-fg); border-color: var(--a-bd); }
+.chip.w { background: var(--w-bg); color: var(--w-fg); border-color: var(--w-bd); }
+.chip.q { border: 1px dashed var(--q-bd); color: var(--q-fg); }
+.chip.r { background: var(--r-bg); color: var(--r-fg); }
+.chip.idle { border-color: var(--idle-bd); color: var(--idle-fg); }
+.chip.slot { padding: 11px 10px; font-size: 14px; }
+.empty { font-size: 13px; color: var(--muted); }
+.foot-note { margin-top: auto; font-size: 12px; color: var(--sub); line-height: 1.5; }
+
+.event { margin: 0; background: var(--event); border-radius: 12px; padding: 14px 18px; font-size: 15px; font-weight: 500; line-height: 1.5; min-height: 52px; }
+
+.gantt { display: flex; flex-direction: column; gap: 5px; overflow-x: auto; }
+.grow { display: grid; grid-template-columns: 44px repeat(14, minmax(22px, 1fr)); gap: 4px; align-items: center; min-width: 440px; }
+.gh { text-align: center; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--muted); }
+.gh.now { color: var(--ink); font-weight: 600; }
+.gl { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--sub); }
+.gc { height: 22px; border-radius: 5px; background: transparent; border: 1px solid var(--blank); transition: background-color .3s; }
+.gc.a { background: var(--a-bg); border-color: var(--a-bd); }
+.gc.w { background: var(--w-bg); border-color: var(--w-bd); }
+.gc.q { border: 1px dashed var(--q-bd); }
+.gc.r { background: var(--r-bg); border-color: var(--r-bg); }
+.gc.now { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+.foot { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.stats { display: flex; gap: 12px; margin: 0; flex-wrap: wrap; }
+.stats div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; min-width: 170px; }
+.stats dt { font-size: 12px; color: var(--sub); }
+.stats dd { margin: 4px 0 0; font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 22px; }
+.stats dd.warn { color: var(--w-fg); }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, auto); gap: 8px 20px; font-size: 13px; color: var(--sub); }
+.legend li { display: flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid transparent; }
+.sw.a { background: var(--a-bg); border-color: var(--a-bd); }
+.sw.w { background: var(--w-bg); border-color: var(--w-bd); }
+.sw.q { border: 1px dashed var(--q-bd); }
+.sw.r { background: var(--r-bg); }
+
+@media (max-width: 820px) {
+  .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cols > .col:last-child { grid-column: 1 / -1; }
+  .col { min-height: 0; }
+}
+@media (max-width: 560px) {
+  .wrap { padding: 20px 14px; }
+  .head { flex-direction: column; align-items: flex-start; }
+  .cols { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .chip, .gc { transition: none; } }
+</style>
+</head>
+<body>
+<main class="wrap" aria-labelledby="title">
+  <header class="head">
+    <div>
+      <h1 id="title">Orca의 iteration-level 스케줄링</h1>
+      <p class="sub" id="subtitle"></p>
+    </div>
+    <output class="badge" id="badge" aria-live="polite">t = 0</output>
+  </header>
+
+  <div class="bar">
+    <div class="seg" role="group" aria-label="스케줄링 방식">
+      <button type="button" id="mode-orca" aria-pressed="true">Orca (iteration 단위)</button>
+      <button type="button" id="mode-req" aria-pressed="false">기존 (요청 단위)</button>
+    </div>
+    <button type="button" class="ctl" id="prev" aria-label="이전 iteration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button type="button" class="ctl" id="play"><svg viewBox="0 0 24 24" aria-hidden="true" id="play-icon"><path d="M7 5l12 7-12 7z"/></svg><span id="play-label">재생</span></button>
+    <button type="button" class="ctl" id="next" aria-label="다음 iteration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    <label class="range"><span class="sr-only">시간 선택</span><input type="range" id="step" min="0" max="13" step="1" value="0"></label>
+  </div>
+
+  <div class="cols">
+    <section class="card col" aria-label="클라이언트"><h2>클라이언트</h2><div id="c-cli"></div></section>
+    <section class="card col" aria-label="요청 큐"><h2>요청 큐</h2><div id="c-q"></div></section>
+    <section class="card col" aria-label="엔진"><h2>이번 iteration 배치 <small id="eng-info"></small></h2><div id="c-e"></div><p class="foot-note" id="eng-note"></p></section>
+  </div>
+
+  <p class="event" id="event" aria-live="polite"></p>
+
+  <section class="card" aria-label="요청별 타임라인">
+    <div class="gantt" id="gantt"></div>
+  </section>
+
+  <div class="foot">
+    <dl class="stats">
+      <div><dt>끝났는데 배치에 묶인 칸</dt><dd id="m-w" class="warn">0</dd></div>
+      <div><dt>큐에서 기다린 칸</dt><dd id="m-q">0</dd></div>
+      <div><dt>평균 응답 시간 (iteration)</dt><dd id="m-lat">-</dd></div>
+    </dl>
+    <ul class="legend">
+      <li><i class="sw a"></i>연산 중</li>
+      <li><i class="sw w"></i>끝났는데 배치에 묶임</li>
+      <li><i class="sw q"></i>큐에서 대기</li>
+      <li><i class="sw r"></i>응답 반환</li>
+    </ul>
+  </div>
+</main>
+
+<script>
+const T = 14, MAX_BATCH = 3, PLAY_MS = 1000;
+const BASE = [
+  { id: "R1", arr: 0, len: 3 }, { id: "R2", arr: 0, len: 6 }, { id: "R3", arr: 1, len: 2 },
+  { id: "R4", arr: 2, len: 4 }, { id: "R5", arr: 3, len: 1 }, { id: "R6", arr: 5, len: 3 },
+];
+
+// 각 방식으로 시뮬레이션해 요청별 시간축 상태를 만든다.
+// state: "" 도착 전, q 대기, a 연산, w 끝났는데 묶임, r 이번에 반환, d 반환 이후
+function simulateRequestLevel() {
+  const reqs = BASE.map((r) => ({ ...r, states: [], prog: [] }));
+  const batches = [];
+  let cur = null;
+  for (let t = 0; t < T; t++) {
+    if (cur && t === cur.end) cur = null;
+    if (!cur) {
+      const pick = reqs.filter((r) => r.arr <= t && r.start === undefined).sort((a, b) => a.arr - b.arr).slice(0, MAX_BATCH);
+      if (pick.length) {
+        const span = Math.max(...pick.map((r) => r.len));
+        cur = { n: batches.length + 1, start: t, end: t + span, reqs: pick };
+        pick.forEach((r) => { r.start = t; r.end = t + span; });
+        batches.push(cur);
+      }
+    }
+  }
+  reqs.forEach((r) => {
+    for (let t = 0; t < T; t++) {
+      let s;
+      if (t < r.arr) s = "";
+      else if (r.start === undefined || t < r.start) s = "q";
+      else if (t < r.start + r.len) s = "a";
+      else if (t < r.end) s = "w";
+      else if (t === r.end) s = "r";
+      else s = "d";
+      r.states.push(s);
+      r.prog.push(s === "a" ? t - r.start + 1 : 0);
+    }
+    r.done = r.end;
+  });
+  const batchAt = (t) => { const b = batches.find((x) => t >= x.start && t < x.end); return b ? { label: `배치 ${b.n} · ${t - b.start + 1}/${b.end - b.start}`, reqs: b.reqs } : null; };
+  return { reqs, batchAt, batches };
+}
+
+function simulateOrca() {
+  const reqs = BASE.map((r) => ({ ...r, states: Array(T).fill(""), prog: Array(T).fill(0), ran: 0 }));
+  const batchList = [];
+  for (let t = 0; t < T; t++) {
+    const pick = reqs.filter((r) => r.arr <= t && r.ran < r.len).sort((a, b) => a.arr - b.arr).slice(0, MAX_BATCH);
+    batchList.push(pick);
+    pick.forEach((r) => { r.ran++; r.prog[t] = r.ran; if (r.first === undefined) r.first = t; if (r.ran === r.len) r.done = t + 1; });
+    reqs.forEach((r) => {
+      if (t < r.arr) r.states[t] = "";
+      else if (pick.includes(r)) r.states[t] = "a";
+      else if (r.done !== undefined && t >= r.done) r.states[t] = t === r.done ? "r" : "d";
+      else r.states[t] = "q";
+    });
+  }
+  const batchAt = (t) => (batchList[t].length ? { label: `iteration ${t}`, reqs: batchList[t] } : null);
+  return { reqs, batchAt, batchList };
+}
+
+const SIMS = { orca: simulateOrca(), req: simulateRequestLevel() };
+let mode = "orca", t = 0, timer = null;
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html !== undefined) n.innerHTML = html; return n; };
+const LABEL = { "": "전송 전", q: "대기 중", a: "처리 중", w: "끝남 · 반환 대기", r: "응답 받음", d: "응답 받음" };
+
+function events(sim, t) {
+  const out = [];
+  const arrived = sim.reqs.filter((r) => r.arr === t);
+  const returned = sim.reqs.filter((r) => r.done === t);
+  if (mode === "orca") {
+    if (returned.length) out.push(`${returned.map((r) => r.id).join(", ")} 끝난 직후 바로 반환`);
+    arrived.forEach((r) => {
+      if (r.states[t] === "a") out.push(`${r.id} 도착하자마자 이번 iteration에 합류`);
+      else out.push(`${r.id} 도착 · 배치가 꽉 차서 다음 iteration을 기다림`);
+    });
+    const joined = sim.reqs.filter((r) => r.first === t && r.arr < t);
+    joined.forEach((r) => out.push(`빈자리에 ${r.id} 투입`));
+    const b = sim.batchAt(t);
+    if (b && b.reqs.length < MAX_BATCH && !sim.reqs.some((r) => r.states[t] === "q")) out.push("대기 중인 요청이 없어 슬롯 일부가 빔");
+    if (!b) out.push("처리할 요청 없음 · 새 요청이 오면 바로 투입 가능");
+  } else {
+    arrived.forEach((r) => out.push(`${r.id} 도착`));
+    if (returned.length) out.push(`배치 종료 → ${returned.map((r) => r.id).join(", ")} 한꺼번에 반환`);
+    const nb = sim.batches.find((x) => x.start === t);
+    if (nb) out.push(`배치 ${nb.n} 시작: ${nb.reqs.map((r) => r.id).join(", ")} (가장 긴 요청 기준 ${nb.end - nb.start} iteration 고정)`);
+    const held = sim.reqs.filter((r) => r.states[t] === "w");
+    if (held.length && !returned.length) out.push(`${held.map((r) => r.id).join(", ")}는 끝났지만 배치가 안 끝나 반환 불가`);
+    if (!out.length) out.push(sim.batchAt(t) ? "배치 진행 중" : "처리할 요청 없음");
+  }
+  if (!out.length) out.push("진행 중");
+  return out.join(" · ");
+}
+
+function render() {
+  const sim = SIMS[mode];
+  $("step").value = t;
+  $("badge").textContent = `t = ${t}`;
+  $("subtitle").textContent = mode === "orca"
+    ? "엔진은 한 번에 1 iteration만 돌고 스케줄러로 돌아옵니다. 그때마다 끝난 요청은 빼고, 새 요청은 넣습니다."
+    : "엔진은 배치를 받으면 가장 긴 요청이 끝날 때까지 돌려주지 않습니다. 비교를 위한 기존 방식입니다.";
+  $("mode-orca").setAttribute("aria-pressed", mode === "orca");
+  $("mode-req").setAttribute("aria-pressed", mode === "req");
+
+  const cli = $("c-cli"); cli.replaceChildren();
+  sim.reqs.forEach((r, i) => {
+    const s = r.states[t];
+    const cls = s === "" ? "idle" : s === "d" ? "r" : s;
+    cli.append(el("div", `chip ${cls}`, `<b>클라이언트 ${i + 1}</b><span>${LABEL[s]}</span>`));
+  });
+
+  const q = $("c-q"); q.replaceChildren();
+  const queued = sim.reqs.filter((r) => r.states[t] === "q");
+  if (!queued.length) q.append(el("p", "empty", "비어 있음"));
+  queued.forEach((r) => q.append(el("div", "chip q", `<b>${r.id}</b><span>t${r.arr} 도착</span>`)));
+
+  const e = $("c-e"); e.replaceChildren();
+  const b = sim.batchAt(t);
+  $("eng-info").textContent = b ? b.label : "유휴";
+  if (b) b.reqs.forEach((r) => {
+    if (r.states[t] === "a") e.append(el("div", "chip slot a", `<b>${r.id}</b><span>${r.prog[t]} / ${r.len} 토큰</span>`));
+    else e.append(el("div", "chip slot w", `<b>${r.id}</b><span>끝남 · 자리만 차지</span>`));
+  });
+  for (let k = b ? b.reqs.length : 0; k < MAX_BATCH; k++) {
+    const txt = mode === "orca" ? "다음 iteration에 채울 수 있음" : (b ? "배치 고정 중" : "비어 있음");
+    e.append(el("div", "chip slot idle", `<b>빈 슬롯</b><span>${txt}</span>`));
+  }
+  $("eng-note").textContent = mode === "orca"
+    ? "iteration이 끝날 때마다 스케줄러가 배치를 다시 짭니다."
+    : "배치가 정해지면 끝날 때까지 구성을 바꿀 수 없습니다.";
+
+  $("event").textContent = events(sim, t);
+
+  const g = $("gantt"); g.replaceChildren();
+  const head = el("div", "grow"); head.append(el("span"));
+  for (let i = 0; i < T; i++) head.append(el("span", "gh" + (i === t ? " now" : ""), String(i)));
+  g.append(head);
+  let wasted = 0, waited = 0;
+  sim.reqs.forEach((r) => {
+    const row = el("div", "grow"); row.append(el("span", "gl", r.id));
+    for (let i = 0; i < T; i++) {
+      const s = i <= t ? r.states[i] : "";
+      if (i <= t && s === "w") wasted++;
+      if (i <= t && s === "q") waited++;
+      row.append(el("span", "gc" + (s && s !== "d" ? " " + s : "") + (i === t ? " now" : "")));
+    }
+    g.append(row);
+  });
+  $("m-w").textContent = wasted;
+  $("m-q").textContent = waited;
+  const finished = sim.reqs.filter((r) => r.done !== undefined && r.done <= t);
+  $("m-lat").textContent = finished.length === sim.reqs.length
+    ? (finished.reduce((s, r) => s + (r.done - r.arr), 0) / finished.length).toFixed(2)
+    : `- (${finished.length}/${sim.reqs.length} 완료)`;
+}
+
+function setPlaying(on) {
+  clearInterval(timer); timer = null;
+  $("play-label").textContent = on ? "일시정지" : "재생";
+  $("play-icon").innerHTML = on ? '<path d="M8 5v14M16 5v14"/>' : '<path d="M7 5l12 7-12 7z"/>';
+  if (on) {
+    if (t >= T - 1) { t = 0; render(); }
+    timer = setInterval(() => { t = t >= T - 1 ? 0 : t + 1; render(); }, PLAY_MS);
+  }
+}
+
+$("mode-orca").addEventListener("click", () => { mode = "orca"; render(); });
+$("mode-req").addEventListener("click", () => { mode = "req"; render(); });
+$("play").addEventListener("click", () => setPlaying(timer === null));
+$("prev").addEventListener("click", () => { setPlaying(false); t = Math.max(0, t - 1); render(); });
+$("next").addEventListener("click", () => { setPlaying(false); t = Math.min(T - 1, t + 1); render(); });
+$("step").addEventListener("input", (ev) => { setPlaying(false); t = Number(ev.target.value); render(); });
+render();
+</script>
+</body>
+</html>
