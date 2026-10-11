@@ -4,9 +4,8 @@ date: 2026-10-11 16:30:00 +0900
 categories: [Paper Review, LLM Serving]
 tags: [orca, llm, inference, serving, batching, kv-cache]
 description: 요청 단위가 아닌 iteration 단위로 스케줄링해 LLM 서빙의 지연과 처리량을 함께 개선한 Orca(OSDI '22)를 정리했습니다.
-media_subpath: /assets/img/posts/orca/
 image:
-  path: 08_system_overview.png
+  path: /assets/img/posts/orca/08_system_overview.png
   alt: Orca 시스템 구조. 스케줄러가 request pool에서 요청을 골라 실행 엔진에 1 iteration씩 넘기고 결과를 돌려받는다. 출처는 Orca 논문(OSDI '22)
 ---
 
@@ -80,7 +79,7 @@ Background에서는 주로 KV 캐시를 설명한다.
 
 **문제: 하나의 배치에서 먼저 끝난 요청**
 
-![기존 request-level 방식과 Orca iteration-level 방식에서 요청 A, B, C가 처리되는 타임라인 비교](01_request_finish_early.png){: w="1496" h="1048" }
+![기존 request-level 방식과 Orca iteration-level 방식에서 요청 A, B, C가 처리되는 타임라인 비교](/assets/img/posts/orca/01_request_finish_early.png){: w="1496" h="1048" }
 _A, B 요청이 동시에 도착해 하나의 배치로 묶였다고 가정_
 
 **해결**
@@ -92,11 +91,11 @@ _A, B 요청이 동시에 도착해 하나의 배치로 묶였다고 가정_
 
 **기존의 요청 단위 배치**
 
-![기존 방식 iter 2에서 요청 A, B의 Q와 K 전치 행렬이 같은 shape이라 batched matmul 한 번으로 처리되는 모습](02_request_level_batch.png){: w="1080" h="766" }
+![기존 방식 iter 2에서 요청 A, B의 Q와 K 전치 행렬이 같은 shape이라 batched matmul 한 번으로 처리되는 모습](/assets/img/posts/orca/02_request_level_batch.png){: w="1080" h="766" }
 
 **Orca가 제안하는 iteration 단위 배치에서 문제가 되는 부분**
 
-![Orca iter 3에서 요청 A와 C의 Q, K 전치 행렬 shape이 달라 batched matmul이 불가능한 모습](03_iteration_batch_problem.png){: w="1220" h="822" }
+![Orca iter 3에서 요청 A와 C의 Q, K 전치 행렬 shape이 달라 batched matmul이 불가능한 모습](/assets/img/posts/orca/03_iteration_batch_problem.png){: w="1220" h="822" }
 
 > 그럼 패딩을 넣어서 배치 처리하면 되지 않을까? 라는 생각이 들 수 있다.
 > 결론부터 말하면 패딩된 빈칸은 연산과 메모리를 모두 낭비한다. 요청마다 진행된 토큰 양이 너무 다르기 때문이다.
@@ -108,7 +107,7 @@ _A, B 요청이 동시에 도착해 하나의 배치로 묶였다고 가정_
 
 **Selective batching 구조**
 
-![QKV linear와 out linear, MLP는 4개 토큰을 한 번에 배치 처리하고 attention만 요청 A와 C로 분리해 처리하는 흐름도](04_selective_batching.png){: w="1218" h="1034" }
+![QKV linear와 out linear, MLP는 4개 토큰을 한 번에 배치 처리하고 attention만 요청 A와 C로 분리해 처리하는 흐름도](/assets/img/posts/orca/04_selective_batching.png){: w="1218" h="1034" }
 
 - QKV linear 연산, MLP 연산은 배치로 처리한다.
 - Attention은 요청별로 개별 처리한다.
@@ -123,7 +122,7 @@ Orca의 iteration-level 스케줄링을 기존 요청 단위 방식과 비교해
 
 ### 4.1 Distributed Architecture
 
-![Scheduler, Engine Master, 그리고 Controller와 GPU로 구성된 Worker들로 이루어진 Orca 시스템 구조](05_distributed_architecture.png){: w="624" h="344" }
+![Scheduler, Engine Master, 그리고 Controller와 GPU로 구성된 Worker들로 이루어진 Orca 시스템 구조](/assets/img/posts/orca/05_distributed_architecture.png){: w="624" h="344" }
 _출처: Orca 논문 (OSDI '22)_
 
 - 분산 GPU 처리
@@ -171,7 +170,7 @@ _출처: Orca 논문 (OSDI '22)_
 
 **Pipeline 병렬화**
 
-![Orca 실행 파이프라인과 FasterTransformer 실행 파이프라인의 시간축 비교](06_pipeline_parallelism.png){: w="382" h="297" }
+![Orca 실행 파이프라인과 FasterTransformer 실행 파이프라인의 시간축 비교](/assets/img/posts/orca/06_pipeline_parallelism.png){: w="382" h="297" }
 _출처: Orca 논문 (OSDI '22)_
 
 - 기존 방식(b)과 Orca(a) 모두 여러 GPU로 나눠 파이프라인을 통해 병렬성을 얻을 수 있다.
@@ -184,7 +183,7 @@ _출처: Orca 논문 (OSDI '22)_
 
 ## 실험
 
-![입력과 생성 길이가 32와 256일 때 FasterTransformer와 Orca의 처리량 대비 지연 그래프](07_experiment.png){: w="615" h="483" }
+![입력과 생성 길이가 32와 256일 때 FasterTransformer와 Orca의 처리량 대비 지연 그래프](/assets/img/posts/orca/07_experiment.png){: w="615" h="483" }
 _출처: Orca 논문 (OSDI '22)_
 
 - Orca는 처리량이 늘어도 지연이 거의 늘어나지 않는 구간이 있다.
