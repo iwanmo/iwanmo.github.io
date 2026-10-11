@@ -5,6 +5,9 @@ categories: [Paper Review, LLM Serving]
 tags: [orca, llm, inference, serving, batching, kv-cache]
 description: 요청 단위가 아닌 iteration 단위로 스케줄링해 LLM 서빙의 지연과 처리량을 함께 개선한 Orca(OSDI '22)를 정리했습니다.
 media_subpath: /assets/img/posts/orca/
+image:
+  path: 08_system_overview.png
+  alt: Orca 시스템 구조. 스케줄러가 request pool에서 요청을 골라 실행 엔진에 1 iteration씩 넘기고 결과를 돌려받는다. 출처는 Orca 논문(OSDI '22)
 ---
 
 > **논문**: Gyeong-In Yu et al., [*Orca: A Distributed Serving System for Transformer-Based Generative Models*](https://www.usenix.org/conference/osdi22/presentation/yu), OSDI '22
@@ -85,7 +88,6 @@ _A, B 요청이 동시에 도착해 하나의 배치로 묶였다고 가정_
 - 실행을 요청 단위가 아닌 iteration 단위로 스케줄링한다.
 - 매 iteration마다 제어권이 스케줄러로 돌아온다.
 - 그래서 끝난 요청은 바로 응답하고, 새 요청을 넣을 수 있다.
-
 ### Selective batching
 
 **기존의 요청 단위 배치**
