@@ -63,6 +63,10 @@ analytics:
   fathom:
     id: # fill in your Fathom Site ID
 
+# Google Tag Manager
+google_tag_manager:
+  id: GTM-WPR8M5NW
+
 # Page views settings
 pageviews:
   provider: # now only supports 'goatcounter'
