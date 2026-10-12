@@ -49,7 +49,7 @@ webmaster_verifications:
 # Web Analytics Settings
 analytics:
   google:
-    id: # fill in your Google Analytics ID
+    id: G-X3K432LL4P
   goatcounter:
     id: # fill in your GoatCounter ID
   umami:
@@ -62,10 +62,6 @@ analytics:
     id: # fill in your Cloudflare Web Analytics token
   fathom:
     id: # fill in your Fathom Site ID
-
-# Google Tag Manager
-google_tag_manager:
-  id: GTM-WPR8M5NW
 
 # Page views settings
 pageviews:
