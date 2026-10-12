@@ -5,6 +5,9 @@ categories: [Data Engineering, Airflow]
 tags: [airflow, xcom, taskflow, data-pipeline, s3]
 description: Airflow XCom이 태스크 간 값을 주고받는 구조와 사용법, 큰 데이터를 다룰 때의 주의점, Object Storage XCom Backend 설정까지 정리했습니다.
 mermaid: true
+image:
+  path: /assets/img/posts/airflow-xcom/preview.png
+  alt: 여러 Task가 XCom Backend로 값을 push하고, 다른 Task들이 pull해 가는 Airflow XCom ObjectStorage Backend 구조
 ---
 
 > **TL;DR**
