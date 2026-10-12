@@ -1,6 +1,6 @@
 ---
 title: Hello World
-date: 2026-04-06 22:00:00 +0900
+date: 2026-03-01 22:00:00 +0900
 categories: [Blog]
 tags: [intro]
 image: /assets/img/hello_world.png
