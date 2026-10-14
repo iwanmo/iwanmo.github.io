@@ -6,7 +6,7 @@ tags: [mqa, gqa, mla, attention, kv-cache, llm, inference]
 description: K/V head를 하나로 공유해 디코딩 시 KV cache 읽기 부담을 줄인 Multi-Query Attention(2019)과, 이후 GQA·MLA로 이어진 흐름을 정리했습니다.
 math: true
 image:
-  path: /assets/img/posts/mqa/00_thumbnail.png
+  path: /assets/img/posts/mqa/00_thumbnail.webp
   alt: Query head 8개가 하나의 공유 K/V를 함께 바라보는 Multi-Query Attention 구조를 표현한 입체 그래픽
 ---
 

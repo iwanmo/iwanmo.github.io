@@ -6,8 +6,8 @@ tags: [cuda, gpu, flashattention, tiling, attention, memory-hierarchy, sram, hbm
 description: GPU 구조와 CUDA 프로그래밍 모델, 메모리 계층, 행렬곱 타일링을 차례로 짚으면서 FlashAttention이 왜 빠른지 밑바닥부터 정리했습니다.
 math: true
 image:
-  path: /assets/img/posts/flashattention/00_thumbnail.png
-  alt: HBM 바닥판의 2×2 타일을 온칩 SRAM으로 들어 올리는 입체 그래픽과 FlashAttention 제목
+  path: /assets/img/posts/flashattention/00_thumbnail.webp
+  alt: HBM 바닥판의 2×2 타일을 온칩 SRAM으로 들어 올리는 입체 그래픽
 ---
 
 > **TL;DR**
