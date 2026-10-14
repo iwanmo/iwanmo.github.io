@@ -6,8 +6,8 @@ tags: [cuda, gpu, flashattention, tiling, attention, memory-hierarchy, sram, hbm
 description: GPU 구조와 CUDA 프로그래밍 모델, 메모리 계층, 행렬곱 타일링을 차례로 짚으면서 FlashAttention이 왜 빠른지 밑바닥부터 정리했습니다.
 math: true
 image:
-  path: /assets/img/posts/flashattention/10_tiling_2.png
-  alt: 2×2 타일링으로 행렬곱을 수행하면 A와 B의 각 원소가 HBM에서 2번씩만 읽히는 모습
+  path: /assets/img/posts/flashattention/00_paper_figure1_full.png
+  alt: "메모리 계층별 대역폭, SRAM 블록 단위로 계산하는 FlashAttention 루프, GPT-2 attention 실행 시간 비교 (출처: FlashAttention 논문 Figure 1)"
 ---
 
 > **TL;DR**
