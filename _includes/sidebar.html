@@ -27,14 +27,59 @@
       </li>
       <!-- the real tabs -->
       {% for tab in site.tabs %}
-        <li class="nav-item{% if tab.url == page.url %}{{ " active" }}{% endif %}">
-          <a href="{{ tab.url | relative_url }}" class="nav-link">
-            <i class="fa-fw {{ tab.icon }}"></i>
-            {% capture tab_name %}{{ tab.url | split: '/' }}{% endcapture %}
-
-            <span>{{ site.data.locales[include.lang].tabs.[tab_name] | default: tab.title | upcase }}</span>
-          </a>
-        </li>
+        {% capture tab_name %}{{ tab.url | split: '/' }}{% endcapture %}
+        {% if tab_name == 'categories' %}
+          <!-- categories: expandable list of top-level categories -->
+          {% assign _top_ctgs = '' | split: '' %}
+          {% for post in site.posts %}
+            {% assign _ctg = post.categories | first %}
+            {% if _ctg %}
+              {% unless _top_ctgs contains _ctg %}
+                {% assign _top_ctgs = _top_ctgs | push: _ctg %}
+              {% endunless %}
+            {% endif %}
+          {% endfor %}
+          {% assign _top_ctgs = _top_ctgs | sort %}
+          {% if tab.url == page.url or page.layout == 'category' %}
+            {% assign _ctg_open = true %}
+          {% else %}
+            {% assign _ctg_open = false %}
+          {% endif %}
+          <li class="nav-item{% if _ctg_open %}{{ " active" }}{% endif %}">
+            <details class="sidebar-ctg"{% if _ctg_open %} open{% endif %}>
+              <summary class="nav-link">
+                <i class="fa-fw {{ tab.icon }}"></i>
+                <span>{{ site.data.locales[include.lang].tabs.[tab_name] | default: tab.title | upcase }}</span>
+                <i class="fas fa-angle-down ctg-caret"></i>
+              </summary>
+              <ul class="sidebar-ctg-list">
+                <li>
+                  <a href="{{ tab.url | relative_url }}"{% if tab.url == page.url %} class="active"{% endif %}>전체 보기</a>
+                </li>
+                {% for _ctg in _top_ctgs %}
+                  <li>
+                    <a
+                      href="{{ site.baseurl }}/categories/{{ _ctg | slugify | url_encode }}/"
+                      {% if page.layout == 'category' and page.title == _ctg %}
+                        class="active"
+                      {% endif %}
+                    >
+                      <span>{{ _ctg }}</span>
+                      <span class="ctg-count">{{ site.categories[_ctg].size }}</span>
+                    </a>
+                  </li>
+                {% endfor %}
+              </ul>
+            </details>
+          </li>
+        {% else %}
+          <li class="nav-item{% if tab.url == page.url %}{{ " active" }}{% endif %}">
+            <a href="{{ tab.url | relative_url }}" class="nav-link">
+              <i class="fa-fw {{ tab.icon }}"></i>
+              <span>{{ site.data.locales[include.lang].tabs.[tab_name] | default: tab.title | upcase }}</span>
+            </a>
+          </li>
+        {% endif %}
         <!-- .nav-item -->
       {% endfor %}
     </ul>
