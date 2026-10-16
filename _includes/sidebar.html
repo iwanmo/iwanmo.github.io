@@ -106,6 +106,22 @@
                 {% endfor %}
               </ul>
             </details>
+            <script>
+              /* keep the category list open/closed state consistent across pages */
+              (function () {
+                var el = document.currentScript.previousElementSibling;
+                var key = 'sidebar-ctg-open';
+                try {
+                  var saved = localStorage.getItem(key);
+                  if (saved !== null) el.open = saved === '1';
+                } catch (e) {}
+                el.addEventListener('toggle', function () {
+                  try {
+                    localStorage.setItem(key, el.open ? '1' : '0');
+                  } catch (e) {}
+                });
+              })();
+            </script>
           </li>
         {% else %}
           <li class="nav-item{% if tab.url == page.url %}{{ " active" }}{% endif %}">
