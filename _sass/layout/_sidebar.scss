@@ -181,25 +181,43 @@ $sidebar-display: 'sidebar-display'; /* the attribute for sidebar display */
       .sidebar-ctg-list {
         list-style: none;
         margin: 0.25rem 0 0.25rem;
-        padding-left: 2.25rem;
+        padding-left: 3.65rem;
 
         a {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 0.35rem 0.75rem;
+          padding: 0.35rem 0.75rem 0.35rem 0;
           border-radius: 0.5rem;
           font-size: 85%;
+          font-weight: 500;
+          letter-spacing: 0.2px;
           color: var(--sidebar-muted-color);
 
           &:hover {
-            background-color: var(--sidebar-hover-bg);
             color: var(--sidebar-active-color);
           }
 
           &.active {
             color: var(--sidebar-active-color);
-            font-weight: 600;
+            font-weight: 700;
+          }
+        }
+
+        .sidebar-subctg-list {
+          list-style: none;
+          margin: 0 0 0.15rem;
+          padding-left: 0;
+          border-left: 1px solid var(--sidebar-border-color);
+
+          a {
+            padding-left: 0.75rem;
+            font-size: 80%;
+            font-weight: 400;
+
+            &.active {
+              font-weight: 700;
+            }
           }
         }
 

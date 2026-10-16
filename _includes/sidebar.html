@@ -40,6 +40,16 @@
             {% endif %}
           {% endfor %}
           {% assign _top_ctgs = _top_ctgs | sort %}
+          {% assign _sub_pairs = '' | split: '' %}
+          {% for post in site.posts %}
+            {% if post.categories.size > 1 %}
+              {% capture _pair %}{{ post.categories[0] }}::{{ post.categories[1] }}{% endcapture %}
+              {% unless _sub_pairs contains _pair %}
+                {% assign _sub_pairs = _sub_pairs | push: _pair %}
+              {% endunless %}
+            {% endif %}
+          {% endfor %}
+          {% assign _sub_pairs = _sub_pairs | sort %}
           {% if tab.url == page.url or page.layout == 'category' %}
             {% assign _ctg_open = true %}
           {% else %}
@@ -54,7 +64,7 @@
               </summary>
               <ul class="sidebar-ctg-list">
                 <li>
-                  <a href="{{ tab.url | relative_url }}"{% if tab.url == page.url %} class="active"{% endif %}>전체 보기</a>
+                  <a href="{{ tab.url | relative_url }}"{% if tab.url == page.url %} class="active"{% endif %}>All</a>
                 </li>
                 {% for _ctg in _top_ctgs %}
                   <li>
@@ -67,6 +77,31 @@
                       <span>{{ _ctg }}</span>
                       <span class="ctg-count">{{ site.categories[_ctg].size }}</span>
                     </a>
+                    {% capture _subs_html %}
+                      {% for _pair in _sub_pairs %}
+                        {% assign _parts = _pair | split: '::' %}
+                        {% if _parts[0] == _ctg %}
+                          {% assign _sub = _parts[1] %}
+                          <li>
+                            <a
+                              href="{{ site.baseurl }}/categories/{{ _sub | slugify | url_encode }}/"
+                              {% if page.layout == 'category' and page.title == _sub %}
+                                class="active"
+                              {% endif %}
+                            >
+                              <span>{{ _sub }}</span>
+                              <span class="ctg-count">{{ site.categories[_sub].size }}</span>
+                            </a>
+                          </li>
+                        {% endif %}
+                      {% endfor %}
+                    {% endcapture %}
+                    {% assign _subs_html = _subs_html | strip %}
+                    {% if _subs_html != '' %}
+                      <ul class="sidebar-subctg-list">
+                        {{ _subs_html }}
+                      </ul>
+                    {% endif %}
                   </li>
                 {% endfor %}
               </ul>
